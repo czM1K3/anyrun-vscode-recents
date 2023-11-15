@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use abi_stable::std_types::{RString, RVec, ROption};
 use anyrun_plugin::*;
 use std::fs;
@@ -54,6 +55,8 @@ fn init(config_dir: RString) -> State {
     let mut vec: Vec<(String, String, u64)> = Vec::new();
     let mut index: u64 = 0;
 
+    let mut already_have: HashSet<String> = HashSet::new();
+
     if let Ok(entries) = fs::read_dir(&base_path) {
         for entry in entries {
             if let Ok(entry) = entry {
@@ -68,8 +71,11 @@ fn init(config_dir: RString) -> State {
                                 let full_path = folder_tmp.replace("file://", "");
                                 let shortcut = folder.file_name().unwrap().to_str().unwrap().to_string();
 
-                                vec.push((full_path, shortcut, index));
-                                index = index + 1;
+                                if !already_have.contains(&full_path) {
+                                    already_have.insert(full_path.clone());
+                                    vec.push((full_path, shortcut, index));
+                                    index = index + 1;
+                                }
                             }
                         }
                     }
@@ -99,12 +105,12 @@ fn get_matches(input: RString, state: &State) -> RVec<Match> {
     }
 
     let vec = state.results.iter().filter_map(|(full, short, id)| {
-        if full.contains(&input.to_string()) {
+        if short.contains(&input.to_string()) {
             Some(Match {
                 title: format!("VSCode: {}", short).into(),
                 icon: ROption::RSome((state.config.icon.to_owned().unwrap())[..].into()),
                 use_pango: false,
-                description: ROption::RSome(format!("{}", full).into()),
+                description: ROption::RSome(full[..].into()),
                 id: ROption::RSome(*id),
             })
         } else {
