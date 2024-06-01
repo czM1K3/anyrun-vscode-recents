@@ -38,7 +38,7 @@ struct Workspace {
 
 #[init]
 fn init(config_dir: RString) -> State {
-    let config: Config = match fs::read_to_string(format!("{}/vscode.ron", config_dir)) {
+    let mut config: Config = match fs::read_to_string(format!("{}/vscode.ron", config_dir)) {
         Ok(content) => ron::from_str(&content).unwrap_or_else(|why| {
             eprintln!("Error parsing applications plugin config: {}", why);
             Config::default()
@@ -48,6 +48,19 @@ fn init(config_dir: RString) -> State {
             Config::default()
         }
     };
+
+    if config.prefix.is_none() {
+        config.prefix = Config::default().prefix;
+    }
+    if config.command.is_none() {
+        config.command = Config::default().command;
+    }
+    if config.icon.is_none() {
+        config.icon = Config::default().icon;
+    }
+    if config.path.is_none() {
+        config.path = Config::default().path;
+    }
 
     let base_path_str = &(config.path.to_owned().unwrap())[..];
 
