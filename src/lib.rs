@@ -9,6 +9,7 @@ use std::process::Command;
 
 #[derive(Deserialize)]
 pub struct Config {
+    prefix: Option<String>,
     command: Option<String>,
     icon: Option<String>,
     path: Option<String>,
@@ -17,6 +18,7 @@ pub struct Config {
 impl Default for Config {
     fn default() -> Self {
         Self {
+            prefix: Some("".into()),
             command: Some("code".to_string()),
             icon: Some("com.visualstudio.code".to_string()),
             path: Some("~/.config/Code/User/workspaceStorage".to_string()),
@@ -99,7 +101,20 @@ fn info() -> PluginInfo {
 
 #[get_matches]
 fn get_matches(input: RString, state: &State) -> RVec<Match> {
-    if input.is_empty() {
+    if let Some(prefix) = &state.config.prefix {
+        if !input.starts_with(prefix) {
+            return RVec::new();
+        }
+    }
+
+    let query = input
+        .trim_start_matches(
+            &<std::option::Option<std::string::String> as Clone>::clone(&state.config.prefix)
+                .unwrap(),
+        )
+        .trim();
+
+    if query.is_empty() {
         return RVec::new();
     }
 
@@ -107,7 +122,7 @@ fn get_matches(input: RString, state: &State) -> RVec<Match> {
         .results
         .iter()
         .filter_map(|(full, short, id)| {
-            if short.contains(&input.to_string()) {
+            if short.contains(&query.to_string()) {
                 Some(Match {
                     title: format!("VSCode: {}", short).into(),
                     icon: ROption::RSome((state.config.icon.to_owned().unwrap())[..].into()),
