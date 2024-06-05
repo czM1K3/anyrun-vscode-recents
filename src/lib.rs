@@ -14,6 +14,7 @@ pub struct Config {
     icon: Option<String>,
     path: Option<String>,
     show_empty: Option<bool>,
+    max_entries: Option<usize>,
 }
 
 impl Default for Config {
@@ -24,6 +25,7 @@ impl Default for Config {
             icon: Some("com.visualstudio.code".to_string()),
             path: Some("~/.config/Code/User/workspaceStorage".to_string()),
             show_empty: Some(false),
+            max_entries: Some(5),
         }
     }
 }
@@ -131,7 +133,7 @@ fn get_matches(input: RString, state: &State) -> RVec<Match> {
                     description: ROption::RSome(full[..].into()),
                     id: ROption::RSome(*id),
                 })
-                .take(5)
+                .take(state.config.max_entries.unwrap())
                 .collect();
         }
     }
@@ -152,7 +154,7 @@ fn get_matches(input: RString, state: &State) -> RVec<Match> {
                 None
             }
         })
-        .take(5)
+        .take(state.config.max_entries.unwrap())
         .collect::<RVec<Match>>();
     vec
 }
