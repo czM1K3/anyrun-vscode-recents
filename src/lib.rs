@@ -9,23 +9,53 @@ use std::process::Command;
 
 #[derive(Deserialize)]
 pub struct Config {
-    prefix: Option<String>,
-    command: Option<String>,
-    icon: Option<String>,
-    path: Option<String>,
-    show_empty: Option<bool>,
-    max_entries: Option<usize>,
+    #[serde(default = "prefix")]
+    prefix: String,
+    #[serde(default = "command")]
+    command: String,
+    #[serde(default = "icon")]
+    icon: String,
+    #[serde(default = "path")]
+    path: String,
+    #[serde(default = "show_empty")]
+    show_empty: bool,
+    #[serde(default = "max_entries")]
+    max_entries: usize,
+}
+
+fn prefix() -> String {
+    "".into()
+}
+
+fn command() -> String {
+    "code".into()
+}
+
+fn icon() -> String {
+    "com.visualstudio.code".into()
+}
+
+fn path() -> String {
+    "~/.config/Code/User/workspaceStorage".into()
+}
+
+fn show_empty() -> bool {
+    false
+}
+
+fn max_entries() -> usize {
+    5
 }
 
 impl Default for Config {
     fn default() -> Self {
         Self {
-            prefix: Some("".into()),
-            command: Some("code".to_string()),
-            icon: Some("com.visualstudio.code".to_string()),
-            path: Some("~/.config/Code/User/workspaceStorage".to_string()),
-            show_empty: Some(false),
-            max_entries: Some(5),
+            prefix: prefix(),
+            command: command(),
+            icon: icon(),
+            path: path(),
+            show_empty: show_empty(),
+            max_entries: max_entries(),
         }
     }
 }
@@ -53,7 +83,7 @@ fn init(config_dir: RString) -> State {
         }
     };
 
-    let base_path_str = &(config.path.to_owned().unwrap())[..];
+    let base_path_str = &(config.path.to_owned())[..];
 
     let expanded_path = tilde(base_path_str);
     let base_path = PathBuf::from(expanded_path.into_owned());
@@ -105,21 +135,14 @@ fn info() -> PluginInfo {
 
 #[get_matches]
 fn get_matches(input: RString, state: &State) -> RVec<Match> {
-    if let Some(prefix) = &state.config.prefix {
-        if !input.starts_with(prefix) {
-            return RVec::new();
-        }
+    if !input.starts_with(&state.config.prefix) {
+        return RVec::new();
     }
 
-    let query = input
-        .trim_start_matches(
-            &<std::option::Option<std::string::String> as Clone>::clone(&state.config.prefix)
-                .unwrap(),
-        )
-        .trim();
+    let query = input.trim_start_matches(&state.config.prefix).trim();
 
     if query.is_empty() {
-        if !state.config.show_empty.unwrap() {
+        if !state.config.show_empty {
             return RVec::new();
         } else {
             // TODO refactor with extracting common parts
@@ -128,12 +151,12 @@ fn get_matches(input: RString, state: &State) -> RVec<Match> {
                 .iter()
                 .map(|(full, short, id)| Match {
                     title: format!("VSCode: {}", short).into(),
-                    icon: ROption::RSome((state.config.icon.to_owned().unwrap())[..].into()),
+                    icon: ROption::RSome((state.config.icon.to_owned())[..].into()),
                     use_pango: false,
                     description: ROption::RSome(full[..].into()),
                     id: ROption::RSome(*id),
                 })
-                .take(state.config.max_entries.unwrap())
+                .take(state.config.max_entries)
                 .collect();
         }
     }
@@ -145,7 +168,7 @@ fn get_matches(input: RString, state: &State) -> RVec<Match> {
             if short.contains(&query.to_string()) {
                 Some(Match {
                     title: format!("VSCode: {}", short).into(),
-                    icon: ROption::RSome((state.config.icon.to_owned().unwrap())[..].into()),
+                    icon: ROption::RSome((state.config.icon.to_owned())[..].into()),
                     use_pango: false,
                     description: ROption::RSome(full[..].into()),
                     id: ROption::RSome(*id),
@@ -154,7 +177,7 @@ fn get_matches(input: RString, state: &State) -> RVec<Match> {
                 None
             }
         })
-        .take(state.config.max_entries.unwrap())
+        .take(state.config.max_entries)
         .collect::<RVec<Match>>();
     vec
 }
@@ -174,11 +197,7 @@ fn handler(selection: Match, state: &State) -> HandleResult {
         .unwrap();
     if Command::new("bash")
         .arg("-c")
-        .arg(format!(
-            "{} {}",
-            state.config.command.to_owned().unwrap(),
-            entry
-        ))
+        .arg(format!("{} {}", state.config.command.to_owned(), entry))
         .spawn()
         .is_err()
     {
