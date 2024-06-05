@@ -13,6 +13,7 @@ pub struct Config {
     command: Option<String>,
     icon: Option<String>,
     path: Option<String>,
+    show_empty: Option<bool>,
 }
 
 impl Default for Config {
@@ -22,6 +23,7 @@ impl Default for Config {
             command: Some("code".to_string()),
             icon: Some("com.visualstudio.code".to_string()),
             path: Some("~/.config/Code/User/workspaceStorage".to_string()),
+            show_empty: Some(false),
         }
     }
 }
@@ -115,7 +117,23 @@ fn get_matches(input: RString, state: &State) -> RVec<Match> {
         .trim();
 
     if query.is_empty() {
-        return RVec::new();
+        if !state.config.show_empty.unwrap() {
+            return RVec::new();
+        } else {
+            // TODO refactor with extracting common parts
+            return state
+                .results
+                .iter()
+                .map(|(full, short, id)| Match {
+                    title: format!("VSCode: {}", short).into(),
+                    icon: ROption::RSome((state.config.icon.to_owned().unwrap())[..].into()),
+                    use_pango: false,
+                    description: ROption::RSome(full[..].into()),
+                    id: ROption::RSome(*id),
+                })
+                .take(5)
+                .collect();
+        }
     }
 
     let vec = state
