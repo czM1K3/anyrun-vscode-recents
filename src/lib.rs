@@ -7,55 +7,62 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+const DEFAULT_PREFIX: &str = "";
+const DEFAULT_COMMAND: &str = "code";
+const DEFAULT_ICON: &str = "com.visualstudio.code";
+const DEFAULT_PATH: &str = "~/.config/Code/User/workspaceStorage";
+const DEFAULT_SHOW_EMPTY: bool = false;
+const DEFAULT_MAX_ENTRIES: usize = 5;
+
 #[derive(Deserialize)]
 pub struct Config {
-    #[serde(default = "prefix")]
+    #[serde(default = "default_prefix")]
     prefix: String,
-    #[serde(default = "command")]
+    #[serde(default = "default_command")]
     command: String,
-    #[serde(default = "icon")]
+    #[serde(default = "default_icon")]
     icon: String,
-    #[serde(default = "path")]
+    #[serde(default = "default_path")]
     path: String,
-    #[serde(default = "show_empty")]
+    #[serde(default = "default_show_empty")]
     show_empty: bool,
-    #[serde(default = "max_entries")]
+    #[serde(default = "default_max_entries")]
     max_entries: usize,
 }
 
-fn prefix() -> String {
-    "".into()
+fn default_prefix() -> String {
+    DEFAULT_PREFIX.into()
 }
 
-fn command() -> String {
-    "code".into()
+fn default_command() -> String {
+    DEFAULT_COMMAND.into()
 }
 
-fn icon() -> String {
-    "com.visualstudio.code".into()
+fn default_icon() -> String {
+    DEFAULT_ICON.into()
 }
 
-fn path() -> String {
-    "~/.config/Code/User/workspaceStorage".into()
+fn default_path() -> String {
+    DEFAULT_PATH.into()
 }
 
-fn show_empty() -> bool {
-    false
+fn default_show_empty() -> bool {
+    DEFAULT_SHOW_EMPTY
 }
 
-fn max_entries() -> usize {
-    5
+fn default_max_entries() -> usize {
+    DEFAULT_MAX_ENTRIES
 }
 
 impl Default for Config {
     fn default() -> Self {
         Self {
-            prefix: prefix(),
-            command: command(),
-            icon: icon(),
-            path: path(),
-            show_empty: show_empty(),
-            max_entries: max_entries(),
+            prefix: default_prefix(),
+            command: default_command(),
+            icon: default_icon(),
+            path: default_path(),
+            show_empty: default_show_empty(),
+            max_entries: default_max_entries(),
         }
     }
 }
@@ -72,44 +79,37 @@ struct Workspace {
 
 #[init]
 fn init(config_dir: RString) -> State {
-    let config: Config = match fs::read_to_string(format!("{}/vscode.ron", config_dir)) {
-        Ok(content) => ron::from_str(&content).unwrap_or_else(|why| {
-            eprintln!("Error parsing applications plugin config: {}", why);
+    let config: Config = fs::read_to_string(format!("{}/vscode.ron", config_dir))
+        .ok()
+        .and_then(|content| ron::from_str(&content).ok())
+        .unwrap_or_else(|| {
+            eprintln!("Error parsing applications plugin config");
             Config::default()
-        }),
-        Err(why) => {
-            eprintln!("Error reading applications plugin config: {}", why);
-            Config::default()
-        }
-    };
+        });
 
-    let base_path_str = &(config.path.to_owned())[..];
-
-    let expanded_path = tilde(base_path_str);
-    let base_path = PathBuf::from(expanded_path.into_owned());
-
-    let mut vec: Vec<(String, String, u64)> = Vec::new();
+    let base_path = PathBuf::from(tilde(&config.path).into_owned());
+    let mut results: Vec<(String, String, u64)> = Vec::new();
     let mut index: u64 = 0;
-
     let mut already_have: HashSet<String> = HashSet::new();
 
     if let Ok(entries) = fs::read_dir(base_path) {
         for entry in entries.flatten() {
             let file_path = entry.path().join("workspace.json");
 
-            if file_path.exists() && file_path.is_file() {
+            if file_path.is_file() {
                 if let Ok(contents) = fs::read_to_string(&file_path) {
                     if let Ok(parsed) = serde_json::from_str::<Workspace>(&contents) {
                         if let Some(folder_tmp) = parsed.folder {
-                            let folder = Path::new(&folder_tmp);
-
                             let full_path = folder_tmp.replace("file://", "");
-                            let shortcut =
-                                folder.file_name().unwrap().to_str().unwrap().to_string();
+                            let shortcut = Path::new(&folder_tmp)
+                                .file_name()
+                                .unwrap()
+                                .to_str()
+                                .unwrap()
+                                .to_string();
 
-                            if !already_have.contains(&full_path) {
-                                already_have.insert(full_path.clone());
-                                vec.push((full_path, shortcut, index));
+                            if already_have.insert(full_path.clone()) {
+                                results.push((full_path, shortcut, index));
                                 index += 1;
                             }
                         }
@@ -119,17 +119,14 @@ fn init(config_dir: RString) -> State {
         }
     }
 
-    State {
-        results: vec,
-        config,
-    }
+    State { results, config }
 }
 
 #[info]
 fn info() -> PluginInfo {
     PluginInfo {
         name: "VSCode Recents".into(),
-        icon: "com.visualstudio.code".into(), // Icon from the icon theme
+        icon: DEFAULT_ICON.into(),
     }
 }
 
@@ -141,36 +138,20 @@ fn get_matches(input: RString, state: &State) -> RVec<Match> {
 
     let query = input.trim_start_matches(&state.config.prefix).trim();
 
-    if query.is_empty() {
-        if !state.config.show_empty {
-            return RVec::new();
-        } else {
-            // TODO refactor with extracting common parts
-            return state
-                .results
-                .iter()
-                .map(|(full, short, id)| Match {
-                    title: format!("VSCode: {}", short).into(),
-                    icon: ROption::RSome((state.config.icon.to_owned())[..].into()),
-                    use_pango: false,
-                    description: ROption::RSome(full[..].into()),
-                    id: ROption::RSome(*id),
-                })
-                .take(state.config.max_entries)
-                .collect();
-        }
+    if query.is_empty() && !state.config.show_empty {
+        return RVec::new();
     }
 
-    let vec = state
+    state
         .results
         .iter()
         .filter_map(|(full, short, id)| {
-            if short.contains(&query.to_string()) {
+            if query.is_empty() || short.contains(query) {
                 Some(Match {
                     title: format!("VSCode: {}", short).into(),
-                    icon: ROption::RSome((state.config.icon.to_owned())[..].into()),
+                    icon: ROption::RSome(state.config.icon.clone().into()),
                     use_pango: false,
-                    description: ROption::RSome(full[..].into()),
+                    description: ROption::RSome(full.clone().into()),
                     id: ROption::RSome(*id),
                 })
             } else {
@@ -178,30 +159,27 @@ fn get_matches(input: RString, state: &State) -> RVec<Match> {
             }
         })
         .take(state.config.max_entries)
-        .collect::<RVec<Match>>();
-    vec
+        .collect()
 }
 
 #[handler]
 fn handler(selection: Match, state: &State) -> HandleResult {
-    let entry = state
-        .results
-        .iter()
-        .find_map(|(full, _short, id)| {
-            if *id == selection.id.unwrap() {
-                Some(full)
-            } else {
-                None
-            }
-        })
-        .unwrap();
-    if Command::new("bash")
-        .arg("-c")
-        .arg(format!("{} {}", state.config.command.to_owned(), entry))
-        .spawn()
-        .is_err()
-    {
-        eprintln!("Error running vscode");
+    if let Some(entry) = state.results.iter().find_map(|(full, _short, id)| {
+        if *id == selection.id.unwrap() {
+            Some(full)
+        } else {
+            None
+        }
+    }) {
+        if Command::new("bash")
+            .arg("-c")
+            .arg(format!("{} {}", state.config.command, entry))
+            .spawn()
+            .is_err()
+        {
+            eprintln!("Error running VSCode");
+        }
     }
+
     HandleResult::Close
 }
