@@ -40,11 +40,11 @@ struct Workspace {
 fn init(config_dir: RString) -> State {
     let mut config: Config = match fs::read_to_string(format!("{}/vscode.ron", config_dir)) {
         Ok(content) => ron::from_str(&content).unwrap_or_else(|why| {
-            eprintln!("Error parsing applications plugin config: {}", why);
+            eprintln!("Error parsing vscode plugin config: {}", why);
             Config::default()
         }),
         Err(why) => {
-            eprintln!("Error reading applications plugin config: {}", why);
+            eprintln!("Error reading vscode plugin config: {}", why);
             Config::default()
         }
     };
