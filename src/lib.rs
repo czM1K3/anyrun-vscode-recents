@@ -67,8 +67,14 @@ impl Default for Config {
     }
 }
 
+struct Project {
+    full: String,
+    short: String,
+    id: u64,
+}
+
 pub struct State {
-    results: Vec<(String, String, u64)>,
+    results: Vec<Project>,
     config: Config,
 }
 
@@ -88,8 +94,8 @@ fn init(config_dir: RString) -> State {
         });
 
     let base_path = PathBuf::from(tilde(&config.path).into_owned());
-    let mut results: Vec<(String, String, u64)> = Vec::new();
-    let mut index: u64 = 0;
+    let mut results: Vec<Project> = Vec::new();
+    let mut id: u64 = 0;
     let mut already_have: HashSet<String> = HashSet::new();
 
     if let Ok(entries) = fs::read_dir(base_path) {
@@ -100,17 +106,17 @@ fn init(config_dir: RString) -> State {
                 if let Ok(contents) = fs::read_to_string(&file_path) {
                     if let Ok(parsed) = serde_json::from_str::<Workspace>(&contents) {
                         if let Some(folder_tmp) = parsed.folder {
-                            let full_path = folder_tmp.replace("file://", "");
-                            let shortcut = Path::new(&folder_tmp)
+                            let full = folder_tmp.replace("file://", "");
+                            let short = Path::new(&folder_tmp)
                                 .file_name()
                                 .unwrap()
                                 .to_str()
                                 .unwrap()
                                 .to_string();
 
-                            if already_have.insert(full_path.clone()) {
-                                results.push((full_path, shortcut, index));
-                                index += 1;
+                            if already_have.insert(full.clone()) {
+                                results.push(Project { full, short, id });
+                                id += 1;
                             }
                         }
                     }
@@ -145,14 +151,14 @@ fn get_matches(input: RString, state: &State) -> RVec<Match> {
     state
         .results
         .iter()
-        .filter_map(|(full, short, id)| {
-            if query.is_empty() || short.contains(query) {
+        .filter_map(|project| {
+            if query.is_empty() || project.short.contains(query) {
                 Some(Match {
-                    title: format!("VSCode: {}", short).into(),
+                    title: format!("VSCode: {}", project.short).into(),
                     icon: ROption::RSome(state.config.icon.clone().into()),
                     use_pango: false,
-                    description: ROption::RSome(full.clone().into()),
-                    id: ROption::RSome(*id),
+                    description: ROption::RSome(project.full.clone().into()),
+                    id: ROption::RSome(project.id),
                 })
             } else {
                 None
@@ -164,9 +170,9 @@ fn get_matches(input: RString, state: &State) -> RVec<Match> {
 
 #[handler]
 fn handler(selection: Match, state: &State) -> HandleResult {
-    if let Some(entry) = state.results.iter().find_map(|(full, _short, id)| {
-        if *id == selection.id.unwrap() {
-            Some(full)
+    if let Some(entry) = state.results.iter().find_map(|project| {
+        if project.id == selection.id.unwrap() {
+            Some(project.full.clone())
         } else {
             None
         }
