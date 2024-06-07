@@ -9,7 +9,7 @@ Config(
   prefix: ":code", // "" by default
   command: "code",
   icon: "com.visualstudio.code",
-  path: "~/.config/Code/User/workspaceStorage",
+  path: "~/.config/Code", // path to vscode settings files
   show_empty: false,
   max_entries: 5
 )
@@ -21,7 +21,7 @@ Config(
   prefix: ":code", // "" by default
   command: "codium",
   icon: "vscodium",
-  path: "~/.config/VSCodium/User/workspaceStorage",
+  path: "~/.config/VSCodium", // path to vscode settings files
   show_empty: false,
   max_entries: 5
 )
